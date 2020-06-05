@@ -1,0 +1,399 @@
+TP clustering : 2019/2020
+M2 MLDS apprentissage
+ABIDAR Bouchra && LIEPCHITZ Laura
+###################################Exercice 1 : compression image #######################################
+```{r}
+library(imager)
+library(dplyr)
+library(ggplot2)
+library(pixmap)
+library(e1071)
+library(plotly)
+```
+
+```{r}
+#Télécharger le fichier image.ppm et charger le package pixmap
+I=pixmap::read.pnm("image.ppm")
+plot(I)
+
+```
+— Convertir l’image I en un tableau de données x donnant le pourcentage de rouge/vert/bleu pour chaque pixel de l’image. On pourra par exemple utiliser la commande :as.vector(attr(I,"red"))
+```{r}
+r <-as.vector(attr(I,"red"))
+g<-as.vector(attr(I,"green"))
+b<-as.vector(attr(I,"blue"))
+x<-data.frame(r,g,b)
+str(x)
+
+```
+— Inversement, pour convertir un tableau de donńees y (pourcentage RGB) en une image J de dimensions 327 × 435 pixels, on pourra utiliser la commande J = pixmapRGB(as.matrix(y),nrow=327,ncol=435)
+```{r}
+#1. Effectuer une  ́etude descriptive des donn ́ees contenues dans le tableau x.
+summary(x)
+```
+```{r}
+p <- plot_ly(type = "box") %>%
+   add_trace(y = x$r, name="red", color="rgb(0,100,0)") %>%
+   add_trace(y = x$g, name="green",color="rgb(255,0,0)") %>%
+   add_trace(y = x$b, name="blue",color="rgb(0, 0, 255)")
+p
+```
+```{r}
+#2. Etudier la ŕepartition des couleurs rouge/vert/bleu dans l’image
+p <- plot_ly(alpha = 0.6) %>%
+  add_histogram(x = x$r, name="red")  %>%
+  add_histogram(x = x$g, name="green")  %>%
+  add_histogram(x = x$b, name="blue") %>%
+  layout(barmode = "overlay")
+
+
+p
+
+```
+
+```{r}
+boxplot(x,names=c("red","green","bleu"),col=c("red","green","blue"),main="Répartition RVB")
+```
+
+```{r}
+#3. Appliquer la CAH-Ward et l’algorithme des k-means, pour réeduire le nombre de couleurs codant l’image. Dans le nouveau tableau de donńees, les points seront remplaćes par le centre de leur classe
+# perfom K-means
+k <- 5
+max_iter <- 50
+K_findings = kmeans(x, centers = k ) # iter.max = max_iter, nstart = 30, algorithm ="MacQueen"
+
+# Assign each pixel to closest centroid
+cluster_group <- cbind(x, K_findings$cluster)
+
+# Make matrix of cluster groups and their color values
+color_centroid_centers <- cbind(1:nrow(K_findings$centers),
+                            K_findings$centers[ ,1],
+                            K_findings$centers[ ,2],
+                            K_findings$centers[ ,3])
+
+# Match the pixel location with the assigned color cluster for compression. 
+compressed_image <- matrix(cluster_group[ ,4],
+                           nrow = 327, 
+                           ncol = 435) # %>% as.cimg %>% plot
+# Reconstruct pic with centroid color values by making image array with red, blue, and green. 
+# Use matrix multiplication. First need to convert color group vector into binary matrix.
+cluster_binary_matrix <- matrix(0, nrow = nrow(cluster_group), ncol = max(K_findings$cluster))
+cluster_binary_matrix[col(cluster_binary_matrix) == cluster_group[ ,4]] <- 1
+
+new_colors_matrix <- cluster_binary_matrix %*% K_findings$centers
+
+J = pixmapRGB(as.matrix(new_colors_matrix),nrow=327,ncol=435)
+plot(J)
+```
+```{r}
+!is.na(x)
+```
+
+```{r}
+library(imager)
+grayscale(x$r) %>% plot
+#In many pictures, the difference between Luma and XYZ conversion is subtle 
+grayscale(boats,method="XYZ") %>% plot
+grayscale(boats,method="XYZ",drop=FALSE) %>% dim
+
+```
+
+```{r}
+#matrice des distances
+d.x <- dist(px)
+cah.ward <- hclust(d.x,method="ward.D2")
+plot(cah.ward)
+```
+
+4. Interpréter les classes obtenues.
+5. Repr ́esenter la nouvelle image ainsi obtenue
+```{r}
+# Piste pour les Q3
+
+# perfom K-means
+k <- 10
+max_iter <- 50
+K_findings = kmeans(x, centers = k, iter.max = max_iter, nstart = 30, algorith="MacQueen")
+
+# Assign each pixel to closest centroid
+cluster_group <- cbind(x, K_findings$cluster)
+
+# Make matrix of cluster groups and their color values
+color_centroid_centers <- cbind(1:nrow(K_findings$centers),
+                            K_findings$centers[ ,1],
+                            K_findings$centers[ ,2],
+                            K_findings$centers[ ,3])
+
+# Match the pixel location with the assigned color cluster for compression. 
+compressed_image <- matrix(cluster_group[ ,4],
+                           nrow = dim(I)[1], 
+                           ncol = dim(I)[2]) # %>% as.cimg %>% plot
+
+# Reconstruct pic with centroid color values by making image array with red, blue, and green. 
+# Use matrix multiplication. First need to convert color group vector into binary matrix.
+cluster_binary_matrix <- matrix(0, nrow = nrow(cluster_group), ncol = max(K_findings$cluster))
+cluster_binary_matrix[col(cluster_binary_matrix) == cluster_group[ ,4]] <- 1
+
+new_colors_matrix <- cluster_binary_matrix %*% K_findings$centers
+
+reconstructed_pic <- array(0, dim = dim(I))
+reconstructed_pic[ , , , 1] <- matrix(new_colors_matrix[ ,1])
+reconstructed_pic[ , , , 2] <- matrix(new_colors_matrix[ ,2])
+reconstructed_pic[ , , , 3] <- matrix(new_colors_matrix[ ,3])
+
+reconstructed_pic %>% as.cimg %>% plot
+```
+
+###################################Exercice 2 : Données aiguillage #######################################
+```{r}
+## Lire les données et supprimer la variables V533(variables des classes)
+data_aiguillage=read.table("http://allousame.free.fr/mlsd/donnees/aiguillage.txt",header = F, sep=",")
+X= as.matrix(data_aiguillage[,-553])
+colnames(X)
+```
+
+```{r}
+# 1-Classifier les données aiguillage en utilisant l’algorithme CAH avec les critéres d’agrégation de Ward et de lien minimum
+D <- dist(X, method = "euclidean")
+h<- hclust(D, method="ward.D2")
+plot(h,xlim = c(1, 20), ylim = c(1,8))
+
+```
+```{r}
+classes <- cutree(h, k=4)
+plot(rev(h$height),type="h", xlim=c(0,20))
+```
+
+```{r}
+table(classes, data_aiguillage$V553)
+```
+-L'algorithme a classifié correctement les classes 3 et 4 (défaut critique et panne).
+-L'algorithme a mal classé un membre de classe 1 et 7 membres de classes 7
+```{r}
+# 3- Propose des représentations graphiques des classes obtenues
+plot(colMeans(X[classes == 1,]),type="l")
+lines(colMeans(X[classes == 2,]),col=4)
+lines(colMeans(X[classes == 3,]),col=3)
+lines(colMeans(X[classes == 4,]),col=2)
+```
+###################################Exercice 3 : Clustering de stations Velib ##################################################
+```{r}
+data_velib=read.csv2("http://allousame.free.fr/mlsd/donnees/velib.txt",header = T, sep=" ")
+head(data_velib)
+dim(data_velib)
+data <- as.matrix(data_velib[,-(1:3)])## supprimer nom: pour applique le pca 
+                                                   ## longitude latitude: variable inutile pour le clustering 
+```
+
+```{r}
+### 2-Représenter graphiquement, pour quelques stations choisies au hasard, les courbesde charge. Observez-vous des différences sur celles-ci ?
+
+```
+
+```{r}
+```
+
+```{r}
+
+```
+
+```{r}
+## 3 - Réaliser un clustering en 6 classes des stations V´elib en utilisant les algorithmes CAH-Ward et k-means.
+D <- dist(data, method = "euclidean")
+H <- hclust(D, method="ward.D2")
+plot(H)
+plot(rev(H$height),type="b", xlim=c(0,20))
+plot(rev(H$height),type="h", xlim=c(0,20))
+```
+
+```{r}
+```
+
+
+###################################Exercice 4 : algorithme de programmation dynamique de Fisher ##################################################
+
+# 1-Implémenter sous R l’algorithme de programmation dynamique de Fisher
+```{r}
+## fonction diam
+diam <- function(data){
+  D <- matrix(data = 0, nrow = nrow(data), ncol = nrow(data))
+  for(a in 1:nrow(data)){
+    for(b in a:nrow(data)){
+      if(dim(data)[2]==1){ # pour tenir en compte les données avec une seule dimension : données sequencesimu
+        lambda <- sum(data[a:b, ]) / (b - a + 1)
+      }else if (dim(data)[2]>1){
+         lambda <- colSums(data[a:b, ]) / (b - a + 1)
+      }
+        D[a, b] <- sum(rowSums(t(t(data[a:b, ]) - lambda)^2))
+    }
+  }
+  return(D)
+}
+```
+
+```{r}
+# fonction clustfisher
+clustfisher <- function(data, K){
+  t <- seq(0, 0, length=K-1)
+  cluster <- seq(0, 0, length=K-1)
+  M <- matrix(data = 0, nrow = nrow(data), ncol = K)
+  A <- matrix(data = 0, nrow = nrow(data), ncol = K)
+  # etape 1
+  D <- diam(data)
+  #etape 2
+  M[,1] <- D[1,]
+  for(k in 2:K){
+    for (i in k:nrow(data)) {
+      M[i, k] <- min(M[(k-1):(i-1), (k-1)]+D[k:i, i])
+      A[i, k] <- which.min(M[(k-1):(i-1), (k-1)]+D[k:i, i]) + k - 1
+    }
+  }
+  # etape 3
+  k <- K-1
+  m <- nrow(data)
+  while(k >= 1){
+    t[k] <- A[m, (k+1)]
+    m <- t[k] - 1
+    k <- k-1
+  }
+# etape 5
+  for(i in seq(1, (t[1] - 1))){
+    cluster[i] <- 1
+  }
+  if(K>2){
+    for(k in seq(2, (K - 1))){
+      for(i in seq(t[k-1], t[k] - 1)){
+        cluster[i] <- k
+      }
+    }
+  }
+  
+  for(i in seq(t[K-1],nrow(data))){
+    cluster[i] <- K
+  }
+  return(list( cluster,t))
+}
+```
+
+
+# 2-Application aux des données simulées
+```{r}
+## Load les données
+sequencesimu <- read.table("http://allousame.free.fr/mlsd/donnees/simu.txt",header = FALSE)
+sequencesimu <- as.matrix(sequencesimu)
+head(sequencesimu)
+```
+
+```{r}
+# Segmentation de données et Réglage du nombre de classes
+coude_methode <- function(data,K){
+  D <- matrix(data = 0, nrow = nrow(data), ncol = nrow(data))
+  for(a in 1:nrow(data)){
+    for(b in a:nrow(data)){
+        lambda <- sum(data[a:b, ]) / (b - a + 1)
+        D[a, b] <- sum(rowSums(t(t(data[a:b, ]) - lambda)^2))
+    }
+  }
+  
+  t <- seq(0, 0, length=K-1)
+  cluster <- seq(0, 0, length=K-1)
+  C <- matrix(data = 0, nrow = nrow(data), ncol = K)
+  C[,1] <- D[1,]
+  for(k in 2:K){
+    for (i in k:nrow(data)) {
+      C[i, k] <- min(C[(k-1):(i-1), (k-1)]+D[k:i, i])
+    }
+  }
+  plot(C[nrow(data),],type="h",lty=1:K,xlab = "Le nombre de clusters",ylab="l'inertie", main = "Visualisation des classes avec la méthode coude")
+}
+```
+
+```{r}
+## tester plusieurs valeurs
+coude_methode(sequencesimu,2)
+coude_methode(sequencesimu,3)
+coude_methode(sequencesimu,4)
+coude_methode(sequencesimu,5)
+coude_methode(sequencesimu,6)
+```
+D'aprés le plot de la méthode coude la partition qui minimise l'inertie intra-classe est celle de k=3
+```{r}
+library(cluster)
+library(fpc)
+plotcluster(sequencesimu, as.numeric(unlist(clustfisher(sequencesimu,3)[1])))
+plotcluster(sequencesimu, as.numeric(unlist(clustfisher(sequencesimu,4)[1])),points=TRUE)
+```
+cette visualisation confirme le choix de K=3
+
+```{r}
+# Comparer la partition à celle issue de l'algorithme des kmeans
+## tester plusieur valeurs pour le cluster
+for(i in seq(1,5)){
+  clus <- kmeans(sequencesimu, centers=i)
+  plotcluster(sequencesimu, clus$cluster)
+}
+
+```
+la présentation optimale des classes est celle de k = 3
+K-means et Ficher ont donné la méme classification ordonnée malgré les deux differentes logiques de chacun des deux algorithmes
+```{r}
+# Méthode de courde pour le k-means pour la confirmation de choix de k=3
+inertie<- seq(0,10)
+for (k in c(2:10)){
+    clus <- kmeans(sequencesimu,centers=k)
+    inertie[k] <- clus$betweenss/clus$totss
+}
+plot(inertie,type="b",xlab="Nombre de clusters",ylab="l'inertie",main = "repartition des classe avec K-means")
+```
+La méthode courde a retourné trois partitions
+# 3-Application aux des données réelles
+```{r}
+data_aiguillage=read.table("http://allousame.free.fr/mlsd/donnees/aiguillage.txt",header = F, sep=",")
+X= as.data.frame(data_aiguillage[,-553])
+#dim(X)
+#clustfisher(X,4)
+```
+
+```{r}
+cluster_aig_ficher <- clustfisher(X,4)
+```
+
+```{r}
+as.numeric(unlist(cluster_aig_ficher[1]))
+```
+
+```{r}
+# Representation Graphique de l'implemenation d'algorith Fisher sur les données réelles : aiguillage
+plot(colMeans(X[as.numeric(unlist(cluster_aig_ficher[1])) == 1,]),type="l")
+lines(colMeans(X[as.numeric(unlist(cluster_aig_ficher[1])) == 2,]),col=4)
+lines(colMeans(X[as.numeric(unlist(cluster_aig_ficher[1])) == 3,]),col=3)
+lines(colMeans(X[as.numeric(unlist(cluster_aig_ficher[1])) == 4,]),col=2)
+
+```
+```{r}
+## Les vraies classes
+plot(colMeans(data_aiguillage[data_aiguillage$V553 == 1,]),type="l")
+lines(colMeans(data_aiguillage[data_aiguillage$V553 == 2,]),col=4)
+lines(colMeans(data_aiguillage[data_aiguillage$V553 == 3,]),col=3)
+lines(colMeans(data_aiguillage[data_aiguillage$V553 == 4,]),col=2)
+```
+```{r}
+### Algorithmes de K-means sur les données aiguillage
+kmeans_aiguillage <- kmeans(X,4) 
+plot(cbind(c(1:140),kmeans_aiguillage$cluster), col=as.numeric(kmeans_aiguillage$cluster),xlab = "index",ylab = "Les classes ",main = "K-means partitions") 
+
+
+```
+```{r}
+# matrice de confusion : k-means
+print("Matrice de confusion pour les résultats de K-means")
+table(kmeans_aiguillage$cluster, data_aiguillage$V553)
+print(" ")
+print("--------")
+print(" ")
+print("Matrice de confusion pour pour les résultats de l'algorithme de Fisher")
+table(as.numeric(unlist(cluster_aig_ficher[1])), data_aiguillage$V553)
+```
+
+Comparaison
+la précision de l’algorithme de programmation dynamique de Fisher est meilleure dans le cas des données rélles par rapport à k-means. On peut interpreter ces resultats par le critère de la classification utlisé par k-means.
